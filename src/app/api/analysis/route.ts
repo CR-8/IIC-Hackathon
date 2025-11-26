@@ -1,11 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { extractText } from '@/lib/ocr';
-import { extractPalette } from '@/lib/palette';
-import { processImage } from '@/lib/image';
-import { analyzeContrast, generateWCAGAnalysis, checkColorBlindSafety } from '@/lib/wcag';
-import { analyzeKeyboardAccessibility } from '@/lib/keyboard';
-import { analyzeSizing } from '@/lib/sizing';
-import { analyzeHierarchy } from '@/lib/hierarchy';
+import { NextRequest, NextResponse } from "next/server";
+import { extractPalette } from "@/lib/palette";
+import { processImage } from "@/lib/image";
+import {
+  analyzeContrast,
+  generateWCAGAnalysis,
+  checkColorBlindSafety,
+} from "@/lib/wcag";
+import { analyzeKeyboardAccessibility } from "@/lib/keyboard";
+import { analyzeSizing } from "@/lib/sizing";
+import { analyzeHierarchy } from "@/lib/hierarchy";
 import {
   suggestUISchemes,
   analyzeContent,
@@ -13,18 +16,18 @@ import {
   analyzeAudience,
   analyzeTheme,
   analyzeResponsiveness,
-} from '@/lib/theme';
-import { analyzeUIWithGemini } from '@/lib/gemini';
-import { AnalysisResult, OverallScore } from '@/lib/types';
+} from "@/lib/theme";
+import { analyzeUIWithGemini } from "@/lib/gemini";
+import { AnalysisResult, OverallScore } from "@/lib/types";
 
 export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
-    const file = formData.get('file') as File;
-    const useGemini = formData.get('useGemini') === 'true';
+    const file = formData.get("file") as File;
+    const useGemini = formData.get("useGemini") === "true";
 
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
     // Convert to buffer and process image
@@ -38,58 +41,58 @@ export async function POST(request: NextRequest) {
       try {
         geminiAnalysis = await analyzeUIWithGemini(processed.buffer);
       } catch (error) {
-        console.error('Gemini analysis failed:', error);
+        console.error("Gemini analysis failed:", error);
       }
     }
-
-    // Run OCR
-    const ocrResult = await extractText(processed.buffer);
 
     // Extract palette
     const paletteResult = await extractPalette(processed.buffer);
 
     // WCAG Analysis
     const textColors = paletteResult.palette.slice(0, 3);
-    const backgroundColors = ['#ffffff', '#000000', paletteResult.dominant];
+    const backgroundColors = ["#ffffff", "#000000", paletteResult.dominant];
     const contrastChecks = analyzeContrast(textColors, backgroundColors);
-    const wcagAnalysis = generateWCAGAnalysis(contrastChecks, false, ['button', 'link']);
+    const wcagAnalysis = generateWCAGAnalysis(contrastChecks, false, [
+      "button",
+      "link",
+    ]);
 
     // Contrast Analysis
     const contrastAnalysis = {
-      lightMode: contrastChecks.filter((c) => c.background === '#ffffff'),
-      darkMode: contrastChecks.filter((c) => c.background === '#000000'),
+      lightMode: contrastChecks.filter((c) => c.background === "#ffffff"),
+      darkMode: contrastChecks.filter((c) => c.background === "#000000"),
       recommendations: contrastChecks
         .filter((c) => !c.passes.AA && c.suggestion)
         .map((c) => ({
           color: c.suggestion!,
           ratio: c.ratio,
-          passes: c.passes.AAA ? 'AAA' : c.passes.AA ? 'AA' : 'FAIL',
+          passes: c.passes.AAA ? "AAA" : c.passes.AA ? "AA" : "FAIL",
         })),
     };
 
     // Hierarchy Analysis
-    const hierarchyAnalysis = analyzeHierarchy(ocrResult, {
+    const hierarchyAnalysis = analyzeHierarchy({
       width: processed.width,
       height: processed.height,
     });
 
     // Sizing Analysis
-    const sizingAnalysis = analyzeSizing(ocrResult);
+    const sizingAnalysis = analyzeSizing();
 
     // Keyboard Accessibility
-    const keyboardAnalysis = analyzeKeyboardAccessibility(ocrResult);
+    const keyboardAnalysis = analyzeKeyboardAccessibility();
 
     // UI Schemes
     const schemesAnalysis = suggestUISchemes(paletteResult.palette);
 
     // Content Suggestions
-    const contentAnalysis = analyzeContent(ocrResult);
+    const contentAnalysis = analyzeContent();
 
     // Typography
-    const typographyAnalysis = analyzeTypography(ocrResult);
+    const typographyAnalysis = analyzeTypography();
 
     // Audience
-    const audienceAnalysis = analyzeAudience(ocrResult, paletteResult.palette);
+    const audienceAnalysis = analyzeAudience(paletteResult.palette);
 
     // Theme
     const themeAnalysis = analyzeTheme(paletteResult.palette);
@@ -102,20 +105,35 @@ export async function POST(request: NextRequest) {
 
     // Calculate Overall Score
     const colorBlindScore = checkColorBlindSafety(paletteResult.palette);
-    const wcagScore = wcagAnalysis.score === 'AAA' ? 100 : wcagAnalysis.score === 'AA' ? 80 : 50;
-    const keyboardScore = keyboardAnalysis.passOrWarn === 'pass' ? 90 : 70;
-    const contrastScore = (contrastChecks.filter((c) => c.passes.AA).length / contrastChecks.length) * 100;
+    const wcagScore =
+      wcagAnalysis.score === "AAA"
+        ? 100
+        : wcagAnalysis.score === "AA"
+        ? 80
+        : 50;
+    const keyboardScore = keyboardAnalysis.passOrWarn === "pass" ? 90 : 70;
+    const contrastScore =
+      (contrastChecks.filter((c) => c.passes.AA).length /
+        contrastChecks.length) *
+      100;
     const typographyScore = typographyAnalysis.readabilityScore;
-    const responsiveScore = responsivenessAnalysis.layoutShiftRisk === 'low' ? 90 : 70;
+    const responsiveScore =
+      responsivenessAnalysis.layoutShiftRisk === "low" ? 90 : 70;
 
     const overallScoreValue = Math.round(
-      (wcagScore + keyboardScore + contrastScore + colorBlindScore + typographyScore + responsiveScore) / 6
+      (wcagScore +
+        keyboardScore +
+        contrastScore +
+        colorBlindScore +
+        typographyScore +
+        responsiveScore) /
+        6
     );
 
-    let label: OverallScore['label'] = 'Poor';
-    if (overallScoreValue >= 90) label = 'Excellent';
-    else if (overallScoreValue >= 75) label = 'Good';
-    else if (overallScoreValue >= 60) label = 'Needs Fixing';
+    let label: OverallScore["label"] = "Poor";
+    if (overallScoreValue >= 90) label = "Excellent";
+    else if (overallScoreValue >= 75) label = "Good";
+    else if (overallScoreValue >= 60) label = "Needs Fixing";
 
     const overallScore: OverallScore = {
       score: overallScoreValue,
@@ -152,9 +170,9 @@ export async function POST(request: NextRequest) {
       geminiEnabled: !!geminiAnalysis,
     });
   } catch (error) {
-    console.error('Analysis error:', error);
+    console.error("Analysis error:", error);
     return NextResponse.json(
-      { error: 'Failed to analyze image' },
+      { error: "Failed to analyze image" },
       { status: 500 }
     );
   }

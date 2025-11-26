@@ -1,13 +1,14 @@
-'use client';
+"use client";
 
-import { AnalysisResult } from '@/lib/types';
-import { StatsCard } from './StatsCard';
-import { MetricCard } from './MetricCard';
-import { CircularProgress } from './CircularProgress';
-import { ProgressBar } from './ProgressBar';
-import { AnalysisCard } from '@/components/custom/AnalysisCard';
-import { PaletteSwatch } from '@/components/custom/PaletteSwatch';
-import { Badge } from '@/components/ui/badge';
+import { AnalysisResult } from "@/lib/types";
+import { StatsCard } from "./StatsCard";
+import { MetricCard } from "./MetricCard";
+import { CircularProgress } from "./CircularProgress";
+import { ProgressBar } from "./ProgressBar";
+import { AnalysisCard } from "@/components/custom/AnalysisCard";
+import { PaletteSwatch } from "@/components/custom/PaletteSwatch";
+import { Badge } from "@/components/ui/badge";
+import { ScoresDashboard } from "./ScoresDashboard";
 import {
   TrendingUp,
   CheckCircle,
@@ -16,8 +17,8 @@ import {
   Monitor,
   Layers,
   Users,
-  Sparkles
-} from 'lucide-react';
+  Sparkles,
+} from "lucide-react";
 
 interface OverviewTabProps {
   data: AnalysisResult;
@@ -26,6 +27,9 @@ interface OverviewTabProps {
 export function OverviewTab({ data }: OverviewTabProps) {
   return (
     <div className="space-y-6">
+      {/* Comprehensive Scores Dashboard */}
+      <ScoresDashboard data={data} />
+
       {/* Top Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatsCard
@@ -34,7 +38,7 @@ export function OverviewTab({ data }: OverviewTabProps) {
           icon={<TrendingUp className="w-5 h-5" />}
           badge={{
             label: data.overallScore.label,
-            variant: data.overallScore.score >= 80 ? 'default' : 'destructive'
+            variant: data.overallScore.score >= 80 ? "default" : "destructive",
           }}
         />
 
@@ -44,25 +48,37 @@ export function OverviewTab({ data }: OverviewTabProps) {
           icon={<CheckCircle className="w-5 h-5" />}
           badge={{
             label: `${data.wcag.errors.length} Errors`,
-            variant: data.wcag.errors.length === 0 ? 'default' : 'destructive'
+            variant: data.wcag.errors.length === 0 ? "default" : "destructive",
           }}
         />
 
         <StatsCard
           title="Contrast Ratio"
-          value={`${data.contrast.lightMode.filter(c => c.ratio >= 4.5).length}/${data.contrast.lightMode.length}`}
+          value={`${
+            data.contrast.lightMode.filter((c) => c.ratio >= 4.5).length
+          }/${data.contrast.lightMode.length}`}
           icon={<Palette className="w-5 h-5" />}
           badge={{
-            label: 'Passing',
-            variant: 'secondary'
+            label: "Passing",
+            variant: "secondary",
           }}
         />
 
         {data.gemini && (
           <StatsCard
-            title="AI Quality"
+            title="AI Quality Score"
             value={`${data.gemini.overallQuality}%`}
             icon={<Sparkles className="w-5 h-5" />}
+            badge={{
+              label:
+                data.gemini.overallQuality >= 75
+                  ? "Excellent"
+                  : data.gemini.overallQuality >= 60
+                  ? "Good"
+                  : "Needs Work",
+              variant:
+                data.gemini.overallQuality >= 75 ? "default" : "secondary",
+            }}
             className="bg-linear-to-br from-primary/5 to-transparent border-primary/20"
           />
         )}
@@ -88,12 +104,14 @@ export function OverviewTab({ data }: OverviewTabProps) {
                 Suggestions
               </h4>
               <ul className="space-y-2">
-                {data.hierarchy.suggestions.slice(0, 3).map((suggestion, idx) => (
-                  <li key={idx} className="text-sm flex items-start gap-2">
-                    <span className="text-primary mt-1">•</span>
-                    {suggestion}
-                  </li>
-                ))}
+                {data.hierarchy.suggestions
+                  .slice(0, 3)
+                  .map((suggestion, idx) => (
+                    <li key={idx} className="text-sm flex items-start gap-2">
+                      <span className="text-primary mt-1">•</span>
+                      {suggestion}
+                    </li>
+                  ))}
               </ul>
             </div>
           </div>
@@ -103,16 +121,19 @@ export function OverviewTab({ data }: OverviewTabProps) {
         <MetricCard
           title="Typography"
           value={`${data.typography.readabilityScore}%`}
-          subtitle={data.typography.pairings[0]?.primary || 'N/A'}
+          subtitle={data.typography.pairings[0]?.primary || "N/A"}
           icon={<Type className="w-5 h-5" />}
           trend={{
-            value: 'Readability',
-            label: 'Score'
+            value: "Readability",
+            label: "Score",
           }}
         />
 
         {/* Color Palette */}
-        <AnalysisCard title="Theme Palette" icon={<Palette className="w-5 h-5" />}>
+        <AnalysisCard
+          title="Theme Palette"
+          icon={<Palette className="w-5 h-5" />}
+        >
           <div className="space-y-4">
             <PaletteSwatch colors={data.theme.basePalette} title="Base" />
             <PaletteSwatch colors={data.theme.accentColors} title="Accents" />
@@ -120,7 +141,10 @@ export function OverviewTab({ data }: OverviewTabProps) {
         </AnalysisCard>
 
         {/* Target Audience */}
-        <AnalysisCard title="Target Audience" icon={<Users className="w-5 h-5" />}>
+        <AnalysisCard
+          title="Target Audience"
+          icon={<Users className="w-5 h-5" />}
+        >
           <div className="space-y-3">
             {data.audience.detected.slice(0, 3).map((aud, idx) => (
               <div
@@ -137,23 +161,83 @@ export function OverviewTab({ data }: OverviewTabProps) {
         </AnalysisCard>
 
         {/* Responsiveness */}
-        <AnalysisCard title="Responsiveness" icon={<Monitor className="w-5 h-5" />}>
+        <AnalysisCard
+          title="Responsiveness"
+          icon={<Monitor className="w-5 h-5" />}
+        >
           <div className="flex flex-col items-center justify-center h-full py-4">
             <div
               className={`text-lg font-semibold px-4 py-2 rounded-full mb-2 ${
-                data.responsiveness.layoutShiftRisk === 'low'
-                  ? 'bg-green-500/10 text-green-600'
-                  : data.responsiveness.layoutShiftRisk === 'medium'
-                  ? 'bg-yellow-500/10 text-yellow-600'
-                  : 'bg-red-500/10 text-red-600'
+                data.responsiveness.layoutShiftRisk === "low"
+                  ? "bg-green-500/10 text-green-600"
+                  : data.responsiveness.layoutShiftRisk === "medium"
+                  ? "bg-yellow-500/10 text-yellow-600"
+                  : "bg-red-500/10 text-red-600"
               }`}
             >
               {data.responsiveness.layoutShiftRisk.toUpperCase()} RISK
             </div>
-            <p className="text-xs text-muted-foreground text-center">Layout Shift Risk</p>
+            <p className="text-xs text-muted-foreground text-center">
+              Layout Shift Risk
+            </p>
           </div>
         </AnalysisCard>
       </div>
+
+      {/* AI Insights Preview (if available) */}
+      {data.gemini && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <AnalysisCard
+            title="AI-Detected UI Type"
+            icon={<Sparkles className="w-5 h-5 text-primary" />}
+          >
+            <div className="space-y-3">
+              <div className="p-4 bg-primary/5 rounded-lg border border-primary/10">
+                <p className="text-sm font-semibold mb-1">Type</p>
+                <p className="text-lg font-bold text-primary">
+                  {data.gemini.uiType}
+                </p>
+              </div>
+              <div className="p-4 bg-secondary/30 rounded-lg">
+                <p className="text-sm font-semibold mb-1">Design System</p>
+                <p className="text-sm">{data.gemini.designSystem}</p>
+              </div>
+            </div>
+          </AnalysisCard>
+
+          <AnalysisCard
+            title="Quick AI Insights"
+            icon={<Sparkles className="w-5 h-5 text-primary" />}
+          >
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Strengths Found</span>
+                <Badge variant="default">{data.gemini.strengths.length}</Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Areas to Improve</span>
+                <Badge variant="secondary">
+                  {data.gemini.weaknesses.length}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">
+                  Accessibility Issues
+                </span>
+                <Badge variant="destructive">
+                  {data.gemini.accessibilityIssues.length}
+                </Badge>
+              </div>
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-muted-foreground">Recommendations</span>
+                <Badge variant="outline">
+                  {data.gemini.recommendations.length}
+                </Badge>
+              </div>
+            </div>
+          </AnalysisCard>
+        </div>
+      )}
     </div>
   );
 }

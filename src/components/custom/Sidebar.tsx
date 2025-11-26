@@ -14,14 +14,11 @@ export function Sidebar() {
 
   const navItems = [
     { icon: LayoutDashboard, label: 'Dashboard', href: '/' },
-    { icon: FileText, label: 'Reports', href: '/reports' },
-    { icon: PieChart, label: 'Analytics', href: '/analytics' },
-    { icon: Users, label: 'Team', href: '/team' },
   ];
 
-  const generalItems = [
-    { icon: Settings, label: 'Settings', href: '/settings' },
-  ];
+  // const generalItems = [
+  //   { icon: Settings, label: 'Settings', href: '/settings' },
+  // ];
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-64 bg-sidebar border-r border-sidebar-border flex flex-col z-50">
@@ -53,7 +50,7 @@ export function Sidebar() {
           ))}
         </div>
 
-        <Separator className="my-6" />
+        {/* <Separator className="my-6" />
 
         <div className="space-y-1">
           <p className="text-xs font-medium text-muted-foreground px-4 mb-2 uppercase tracking-wider">General</p>
@@ -70,17 +67,10 @@ export function Sidebar() {
               </Link>
             </Button>
           ))}
-        </div>
+        </div> */}
       </div>
 
       <div className="mt-auto p-6">
-        <div className="bg-sidebar-accent/50 rounded-xl p-4 mb-4">
-          <p className="text-sm font-medium mb-1">Pro Plan</p>
-          <p className="text-xs text-muted-foreground mb-3">Get access to all features</p>
-          <Button size="sm" className="w-full bg-primary text-primary-foreground hover:bg-primary/90">
-            Upgrade
-          </Button>
-        </div>
 
         <Button
           variant="ghost"

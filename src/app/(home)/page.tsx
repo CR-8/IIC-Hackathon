@@ -1,17 +1,18 @@
-'use client';
+"use client";
 
-import { useState } from 'react';
-import { Sidebar } from '@/components/custom/Sidebar';
-import { Header } from '@/components/custom/Header';
-import { DashboardHeader } from '@/components/dashboard/DashboardHeader';
-import { UploadSection } from '@/components/dashboard/UploadSection';
-import { OverviewTab } from '@/components/dashboard/OverviewTab';
-import { AccessibilityTab } from '@/components/dashboard/AccessibilityTab';
-import { DesignTab } from '@/components/dashboard/DesignTab';
-import { AIInsightsTab } from '@/components/dashboard/AIInsightsTab';
-import { AnalysisResult } from '@/lib/types';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Sparkles } from 'lucide-react';
+import { useState } from "react";
+import { Sidebar } from "@/components/custom/Sidebar";
+import { Header } from "@/components/custom/Header";
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { UploadSection } from "@/components/dashboard/UploadSection";
+import { OverviewTab } from "@/components/dashboard/OverviewTab";
+import { AccessibilityTab } from "@/components/dashboard/AccessibilityTab";
+import { AccessibilityScoresTab } from "@/components/dashboard/AccessibilityScoresTab";
+import { DesignTab } from "@/components/dashboard/DesignTab";
+import { AIInsightsTab } from "@/components/dashboard/AIInsightsTab";
+import { AnalysisResult } from "@/lib/types";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Sparkles, Award } from "lucide-react";
 
 export default function Home() {
   const [analysisData, setAnalysisData] = useState<AnalysisResult | null>(null);
@@ -25,21 +26,21 @@ export default function Home() {
 
     try {
       const formData = new FormData();
-      formData.append('file', file);
-      formData.append('useGemini', useGemini.toString());
+      formData.append("file", file);
+      formData.append("useGemini", useGemini.toString());
 
-      const response = await fetch('/api/analysis', {
-        method: 'POST',
+      const response = await fetch("/api/analysis", {
+        method: "POST",
         body: formData,
       });
 
-      if (!response.ok) throw new Error('Analysis failed');
+      if (!response.ok) throw new Error("Analysis failed");
 
       const data = await response.json();
       setAnalysisData(data.analysis);
     } catch (error) {
-      console.error('Analysis error:', error);
-      alert('Failed to analyze image. Please try again.');
+      console.error("Analysis error:", error);
+      alert("Failed to analyze image. Please try again.");
       setShowUpload(true);
     } finally {
       setIsAnalyzing(false);
@@ -54,10 +55,10 @@ export default function Home() {
   return (
     <div className="flex min-h-screen bg-background font-sans">
       <Sidebar />
-      
+
       <div className="flex-1 ml-64 flex flex-col">
         <Header onUploadClick={handleNewAnalysis} />
-        
+
         <main className="flex-1 p-8 overflow-y-auto">
           {showUpload || !analysisData ? (
             <UploadSection
@@ -72,11 +73,19 @@ export default function Home() {
                 title="Analysis Report"
                 subtitle={`Generated on ${new Date().toLocaleDateString()}`}
                 onRefresh={handleNewAnalysis}
-                onExport={() => console.log('Export PDF')}
+                onExport={() => console.log("Export PDF")}
               />
 
-              <Tabs defaultValue="overview" className="space-y-6">
+              <Tabs defaultValue={analysisData.gemini ? "ai-overview" : "overview"} className="space-y-6">
                 <TabsList className="bg-surface p-1 rounded-xl border border-border/50 inline-flex h-auto">
+                  {analysisData.gemini && (
+                    <TabsTrigger
+                      value="ai-overview"
+                      className="rounded-lg px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" /> AI Overview
+                    </TabsTrigger>
+                  )}
                   <TabsTrigger
                     value="overview"
                     className="rounded-lg px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm"
@@ -95,15 +104,19 @@ export default function Home() {
                   >
                     Design System
                   </TabsTrigger>
-                  {analysisData.gemini && (
-                    <TabsTrigger
-                      value="ai"
-                      className="rounded-lg px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2"
-                    >
-                      <Sparkles className="w-3 h-3" /> AI Insights
-                    </TabsTrigger>
-                  )}
+                  <TabsTrigger
+                    value="scores"
+                    className="rounded-lg px-4 py-2 data-[state=active]:bg-background data-[state=active]:shadow-sm gap-2"
+                  >
+                    <Award className="w-3 h-3" /> Detailed Scores
+                  </TabsTrigger>
                 </TabsList>
+
+                {analysisData.gemini && (
+                  <TabsContent value="ai-overview">
+                    <AIInsightsTab data={analysisData.gemini} />
+                  </TabsContent>
+                )}
 
                 <TabsContent value="overview">
                   <OverviewTab data={analysisData} />
@@ -117,11 +130,9 @@ export default function Home() {
                   <DesignTab data={analysisData} />
                 </TabsContent>
 
-                {analysisData.gemini && (
-                  <TabsContent value="ai">
-                    <AIInsightsTab data={analysisData.gemini} />
-                  </TabsContent>
-                )}
+                <TabsContent value="scores">
+                  <AccessibilityScoresTab data={analysisData} />
+                </TabsContent>
               </Tabs>
             </div>
           )}

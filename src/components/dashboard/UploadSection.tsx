@@ -31,26 +31,6 @@ export function UploadSection({
       </div>
       
       <Card className="rounded-3xl p-8 shadow-sm border border-border/50 mb-8">
-        <div className="flex items-center justify-between mb-6 p-4 bg-secondary/30 rounded-2xl">
-          <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-full ${useGemini ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground'}`}>
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <div>
-              <Label htmlFor="gemini-mode" className="font-semibold text-base cursor-pointer">
-                Gemini AI Analysis
-              </Label>
-              <p className="text-xs text-muted-foreground">
-                Enhanced insights using Google's Gemini 1.5 Flash
-              </p>
-            </div>
-          </div>
-          <Switch
-            id="gemini-mode"
-            checked={useGemini}
-            onCheckedChange={onGeminiToggle}
-          />
-        </div>
         
         <UploadDropzone
           onFileSelected={onFileSelected}

@@ -1,6 +1,6 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || "");
 
 export interface GeminiAnalysis {
   uiType: string;
@@ -18,14 +18,159 @@ export interface GeminiAnalysis {
 }
 
 /**
- * Analyze UI image using Google Gemini Vision API
+ * Retry logic with exponential backoff
  */
-export async function analyzeUIWithGemini(imageBuffer: Buffer): Promise<GeminiAnalysis> {
+async function retryWithBackoff<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  initialDelay: number = 1000
+): Promise<T> {
+  let lastError: Error;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error: unknown) {
+      lastError = error as Error;
+
+      if (i < maxRetries - 1) {
+        const waitTime = initialDelay * Math.pow(2, i);
+        console.log(
+          `Error occurred. Retry ${i + 1}/${maxRetries} after ${waitTime}ms`
+        );
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        continue;
+      }
+
+      throw error;
+    }
+  }
+
+  throw lastError!;
+}
+
+/**
+ * Clean and extract JSON from text response
+ */
+function extractJSON(text: string): string {
+  // Check if text is empty or invalid
+  if (!text || text.trim().length === 0) {
+    console.error("JSON extraction failed: Empty response from API");
+    throw new Error("Empty response from Gemini API");
+  }
+
+  // Remove markdown code blocks
+  const cleaned = text.replace(/```json\s*/gi, "").replace(/```\s*/g, "");
+
+  // Try to find JSON object or array
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
+  if (!jsonMatch) {
+    console.error(
+      "JSON extraction failed. Response text:",
+      text.substring(0, 500)
+    );
+    throw new Error("No valid JSON found in response");
+  }
+
+  const jsonStr = jsonMatch[0].trim();
+
+  // Sanitize JSON to escape control characters in strings
+  const sanitized = sanitizeJSON(jsonStr);
+
+  // Validate it's parseable
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-3-pro' });
+    JSON.parse(sanitized);
+    return sanitized;
+  } catch (e) {
+    console.error("JSON parse validation failed:", e);
+    throw new Error(`Invalid JSON structure: ${e}`);
+  }
+}
+
+/**
+ * Sanitize JSON string by escaping control characters in string literals
+ */
+function sanitizeJSON(jsonStr: string): string {
+  // Replace unescaped control characters in strings with escaped versions
+  return jsonStr.replace(/("(?:[^"\\]|\\.)*")/g, (match) => {
+    return match.replace(/[\n\r\t]/g, (char) => {
+      switch (char) {
+        case "\n":
+          return "\\n";
+        case "\r":
+          return "\\r";
+        case "\t":
+          return "\\t";
+        default:
+          return char;
+      }
+    });
+  });
+}
+
+function validateAnalysis(data: Record<string, unknown>): GeminiAnalysis {
+  const requiredFields = [
+    "uiType",
+    "designSystem",
+    "strengths",
+    "weaknesses",
+    "accessibilityIssues",
+    "recommendations",
+    "colorSchemeAnalysis",
+    "layoutAnalysis",
+    "typographyAnalysis",
+    "userExperience",
+    "targetAudienceMatch",
+    "overallQuality",
+  ];
+
+  for (const field of requiredFields) {
+    if (!(field in data)) {
+      throw new Error(`Missing required field: ${field}`);
+    }
+  }
+
+  const arrayFields = [
+    "strengths",
+    "weaknesses",
+    "accessibilityIssues",
+    "recommendations",
+  ];
+  for (const field of arrayFields) {
+    if (!Array.isArray(data[field])) {
+      data[field] = [];
+    }
+  }
+
+  if (
+    typeof data.overallQuality !== "number" ||
+    data.overallQuality < 0 ||
+    data.overallQuality > 100
+  ) {
+    data.overallQuality = 50;
+  }
+
+  return data as unknown as GeminiAnalysis;
+}
+
+/**
+ * Analyze UI image using Google Gemini Vision API with rate limiting
+ */
+export async function analyzeUIWithGemini(
+  imageBuffer: Buffer
+): Promise<GeminiAnalysis> {
+  try {
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0.4,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 8192,
+      },
+    });
 
     const prompt = `You are a UI/UX and accessibility expert. Analyze this UI screenshot and provide a comprehensive analysis in JSON format with the following structure:
-
 {
   "uiType": "type of UI (e.g., Dashboard, Landing Page, Mobile App, etc.)",
   "designSystem": "identified design system (e.g., Material Design, iOS, Fluent, Custom)",
@@ -55,93 +200,153 @@ Provide specific, actionable feedback. Return ONLY valid JSON, no markdown forma
 
     const imagePart = {
       inlineData: {
-        data: imageBuffer.toString('base64'),
-        mimeType: 'image/png',
+        data: imageBuffer.toString("base64"),
+        mimeType: "image/png",
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
-    const text = response.text();
+    // Retry with exponential backoff
+    const result = await retryWithBackoff(
+      async () => {
+        return await model.generateContent([prompt, imagePart]);
+      },
+      3,
+      2000
+    );
 
-    // Parse JSON response
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Failed to parse Gemini response');
+    const response = result.response;
+    const text = response.text();
+    // Check if response is valid
+    if (!text || text.trim().length === 0) {
+      throw new Error("Empty response from Gemini API");
     }
 
-    const analysis: GeminiAnalysis = JSON.parse(jsonMatch[0]);
+    const jsonString = extractJSON(text);
+    const parsedData = JSON.parse(jsonString);
+    const analysis = validateAnalysis(parsedData);
+
+    console.log("Parsed Gemini analysis:", analysis);
+
     return analysis;
-  } catch (error) {
-    console.error('Gemini analysis error:', error);
-    // Return fallback analysis
+  } catch (error: unknown) {
+    console.error("Gemini analysis error:", error);
+
+    // Check if it's still a rate limit error after retries
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "status" in error &&
+      (error as { status: number }).status === 429
+    ) {
+      return {
+        uiType: "Rate Limit Exceeded",
+        designSystem: "Unable to analyze",
+        strengths: ["Analysis temporarily unavailable due to API rate limits"],
+        weaknesses: ["Please try again in a few minutes"],
+        accessibilityIssues: [
+          "API quota exceeded - unable to perform analysis",
+        ],
+        recommendations: [
+          "Wait 60 seconds before analyzing another image",
+          "Consider upgrading to Gemini API paid tier for higher limits",
+          "Reduce analysis frequency",
+          "Use batch processing with delays between requests",
+          "Monitor usage at https://ai.dev/usage",
+        ],
+        colorSchemeAnalysis: "Rate limit exceeded - analysis unavailable",
+        layoutAnalysis: "Rate limit exceeded - analysis unavailable",
+        typographyAnalysis: "Rate limit exceeded - analysis unavailable",
+        userExperience: "Rate limit exceeded - analysis unavailable",
+        targetAudienceMatch: "Unable to determine due to rate limits",
+        overallQuality: 0,
+      };
+    }
+
+    // Generic fallback
     return {
-      uiType: 'Unknown',
-      designSystem: 'Custom',
-      strengths: ['Modern appearance'],
-      weaknesses: ['Needs accessibility review'],
-      accessibilityIssues: ['Unable to perform AI analysis'],
-      recommendations: ['Manual review recommended'],
-      colorSchemeAnalysis: 'Unable to analyze',
-      layoutAnalysis: 'Unable to analyze',
-      typographyAnalysis: 'Unable to analyze',
-      userExperience: 'Unable to assess',
-      targetAudienceMatch: 'General audience',
+      uiType: "Unknown",
+      designSystem: "Custom",
+      strengths: ["Modern appearance", "Functional layout"],
+      weaknesses: ["AI analysis unavailable", "Manual review recommended"],
+      accessibilityIssues: ["Unable to perform automated analysis"],
+      recommendations: [
+        "Perform manual accessibility audit",
+        "Test with screen readers (NVDA, JAWS)",
+        "Verify color contrast ratios manually",
+        "Check keyboard navigation",
+        "Validate WCAG 2.1 AA compliance",
+      ],
+      colorSchemeAnalysis: "Unable to analyze due to processing error",
+      layoutAnalysis: "Unable to analyze due to processing error",
+      typographyAnalysis: "Unable to analyze due to processing error",
+      userExperience: "Unable to assess due to processing error",
+      targetAudienceMatch: "General audience - manual evaluation needed",
       overallQuality: 50,
     };
   }
 }
 
 /**
- * Get design system recommendations based on detected patterns
+ * Get design system recommendations with rate limiting
  */
 export async function getDesignSystemRecommendations(
   imageBuffer: Buffer
 ): Promise<{ name: string; confidence: number; reasoning: string }[]> {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0.3,
+        maxOutputTokens: 2048,
+      },
+    });
 
-    const prompt = `Analyze this UI screenshot and identify which design system it follows or should follow. Return JSON array:
+    const prompt = `Analyze this UI and identify design systems. Return ONLY JSON array:
 
-[
-  {
-    "name": "design system name",
-    "confidence": 0-100,
-    "reasoning": "why this system matches"
-  }
-]
+[{"name": "system name", "confidence": 0-100, "reasoning": "why"}]
 
-Consider: Material Design, iOS Human Interface, Fluent Design, Tailwind UI, Ant Design, Bootstrap, Custom.
-Return ONLY valid JSON array, no markdown.`;
+Consider: Material Design, iOS, Fluent, Tailwind, Ant Design, Bootstrap, Custom.`;
 
     const imagePart = {
       inlineData: {
-        data: imageBuffer.toString('base64'),
-        mimeType: 'image/png',
+        data: imageBuffer.toString("base64"),
+        mimeType: "image/png",
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
+    const result = await retryWithBackoff(async () => {
+      return await model.generateContent([prompt, imagePart]);
+    });
+
+    const response = result.response;
     const text = response.text();
 
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      throw new Error('Failed to parse response');
+    if (!text || text.trim().length === 0) {
+      throw new Error("Empty response from Gemini API");
     }
 
-    return JSON.parse(jsonMatch[0]);
+    const jsonString = extractJSON(text);
+    const recommendations = JSON.parse(jsonString);
+
+    if (!Array.isArray(recommendations)) {
+      throw new Error("Response is not an array");
+    }
+
+    return recommendations;
   } catch (error) {
-    console.error('Design system recommendation error:', error);
+    console.error("Design system recommendation error:", error);
     return [
-      { name: 'Custom', confidence: 50, reasoning: 'Unable to detect specific system' },
+      {
+        name: "Custom",
+        confidence: 50,
+        reasoning: "Unable to detect - rate limit or processing error",
+      },
     ];
   }
 }
 
 /**
- * Extract text from UI image using Gemini Vision
- * Replaces Tesseract.js with more reliable AI-based text extraction
+ * Extract text with rate limiting
  */
 export async function extractTextWithGemini(imageBuffer: Buffer): Promise<{
   text: string;
@@ -152,48 +357,58 @@ export async function extractTextWithGemini(imageBuffer: Buffer): Promise<{
   }>;
 }> {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0.2,
+        maxOutputTokens: 4096,
+      },
+    });
 
-    const prompt = `Extract ALL text from this UI screenshot. Return a JSON object:
+    const prompt = `Extract all visible text from this UI screenshot. You MUST return ONLY a valid JSON object with this exact structure:
 
 {
-  "text": "all extracted text concatenated",
+  "text": "concatenated string of all text found",
   "words": [
-    {
-      "text": "individual word",
-      "estimatedSize": "font size in pixels (estimate)",
-      "position": "top/middle/bottom and left/center/right"
-    }
+    {"text": "individual word or phrase", "estimatedSize": "16", "position": "top left"}
   ]
 }
 
-Extract every visible text element. Estimate font sizes based on visual prominence. Return ONLY valid JSON.`;
+Rules:
+- Return ONLY the JSON object, no explanations or markdown
+- If no text is found, return {"text": "", "words": []}
+- estimatedSize should be a number string (e.g., "14", "16", "20")
+- position should combine vertical (top/middle/bottom) and horizontal (left/center/right)`;
 
     const imagePart = {
       inlineData: {
-        data: imageBuffer.toString('base64'),
-        mimeType: 'image/png',
+        data: imageBuffer.toString("base64"),
+        mimeType: "image/png",
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
+    const result = await retryWithBackoff(async () => {
+      return await model.generateContent([prompt, imagePart]);
+    });
+
+    const response = result.response;
     const text = response.text();
+    const jsonString = extractJSON(text);
+    const data = JSON.parse(jsonString) as {
+      text?: string;
+      words?: Array<{ text: string; estimatedSize: string; position?: string }>;
+    };
 
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error('Failed to parse response');
-    }
-
-    const data = JSON.parse(jsonMatch[0]);
-    
-    // Convert Gemini response to our OCRResult format with estimated bounding boxes
-    const words = (data.words || []).map((word: any, idx: number) => {
-      // Estimate bbox based on position (simplified for now)
+    const words = (data.words || []).map((word) => {
       const size = parseInt(word.estimatedSize) || 16;
-      const baseX = word.position?.includes('left') ? 100 : word.position?.includes('right') ? 700 : 400;
-      const baseY = word.position?.includes('top') ? 100 : word.position?.includes('bottom') ? 700 : 400;
-      
+      let baseX = 400,
+        baseY = 400;
+
+      if (word.position?.includes("left")) baseX = 100;
+      if (word.position?.includes("right")) baseX = 700;
+      if (word.position?.includes("top")) baseY = 100;
+      if (word.position?.includes("bottom")) baseY = 700;
+
       return {
         text: word.text,
         bbox: {
@@ -202,65 +417,72 @@ Extract every visible text element. Estimate font sizes based on visual prominen
           x1: baseX + word.text.length * size * 0.6,
           y1: baseY + size,
         },
-        confidence: 90, // Gemini is generally accurate
+        confidence: 85,
       };
     });
 
-    return {
-      text: data.text || '',
-      words,
-    };
+    return { text: data.text || "", words };
   } catch (error) {
-    console.error('Gemini text extraction error:', error);
-    return {
-      text: '',
-      words: [],
-    };
+    console.error("Gemini text extraction error:", error);
+    return { text: "", words: [] };
   }
 }
 
 /**
- * Get accessibility-specific recommendations from Gemini
+ * Get accessibility recommendations with rate limiting
  */
-export async function getAccessibilityRecommendations(imageBuffer: Buffer): Promise<string[]> {
+export async function getAccessibilityRecommendations(
+  imageBuffer: Buffer
+): Promise<string[]> {
   try {
-    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+    const model = genAI.getGenerativeModel({
+      model: "gemini-2.5-flash",
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: 3072,
+      },
+    });
 
-    const prompt = `You are a WCAG accessibility expert. Analyze this UI and provide specific accessibility recommendations. Return JSON array of strings:
+    const prompt = `WCAG accessibility analysis. Return ONLY JSON array:
 
 ["recommendation 1", "recommendation 2", ...]
 
-Focus on:
-- Color contrast (WCAG AA/AAA)
-- Text readability
-- Interactive element sizes (44px minimum)
-- Focus indicators
-- Screen reader compatibility
-- Keyboard navigation
-- Alt text for images
-- Heading hierarchy
-
-Provide 5-10 specific, actionable recommendations. Return ONLY JSON array.`;
+Focus: contrast ratios, 16px min text, 44px touch targets, focus indicators, ARIA labels, keyboard nav.`;
 
     const imagePart = {
       inlineData: {
-        data: imageBuffer.toString('base64'),
-        mimeType: 'image/png',
+        data: imageBuffer.toString("base64"),
+        mimeType: "image/png",
       },
     };
 
-    const result = await model.generateContent([prompt, imagePart]);
-    const response = await result.response;
+    const result = await retryWithBackoff(async () => {
+      return await model.generateContent([prompt, imagePart]);
+    });
+
+    const response = result.response;
     const text = response.text();
 
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      throw new Error('Failed to parse response');
+    if (!text || text.trim().length === 0) {
+      throw new Error("Empty response from Gemini API");
     }
 
-    return JSON.parse(jsonMatch[0]);
+    const jsonString = extractJSON(text);
+    const recommendations = JSON.parse(jsonString);
+
+    if (!Array.isArray(recommendations)) {
+      throw new Error("Response is not an array");
+    }
+
+    return recommendations;
   } catch (error) {
-    console.error('Accessibility recommendations error:', error);
-    return ['Unable to generate AI-powered recommendations'];
+    console.error("Accessibility recommendations error:", error);
+    return [
+      "Manual WCAG 2.1 AA audit required",
+      "Test with screen readers",
+      "Verify 44px touch targets",
+      "Check 4.5:1 contrast ratios",
+      "Test keyboard navigation",
+    ];
   }
 }

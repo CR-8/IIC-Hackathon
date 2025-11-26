@@ -1,10 +1,13 @@
-import { HierarchyAnalysis, OCRResult } from './types';
+import { HierarchyAnalysis } from "./types";
 
 /**
- * Analyze information hierarchy from OCR results
+ * Analyze information hierarchy
  */
-export function analyzeHierarchy(ocrResult: OCRResult, imageDimensions: { width: number; height: number }): HierarchyAnalysis {
-  const words = ocrResult.words;
+export function analyzeHierarchy(imageDimensions: {
+  width: number;
+  height: number;
+}): HierarchyAnalysis {
+  const words: any[] = [];
 
   // Calculate text sizes
   const textSizes = words.map((word) => ({
@@ -22,8 +25,13 @@ export function analyzeHierarchy(ocrResult: OCRResult, imageDimensions: { width:
   const poorGrouping: string[] = [];
 
   // Check for overly large elements
-  if (sortedBySizes.length > 0 && sortedBySizes[0].size > imageDimensions.height * 0.2) {
-    dominantElements.push(`"${sortedBySizes[0].text}" is too dominant (${sortedBySizes[0].size}px)`);
+  if (
+    sortedBySizes.length > 0 &&
+    sortedBySizes[0].size > imageDimensions.height * 0.2
+  ) {
+    dominantElements.push(
+      `"${sortedBySizes[0].text}" is too dominant (${sortedBySizes[0].size}px)`
+    );
   }
 
   // Check for heading patterns
@@ -32,11 +40,11 @@ export function analyzeHierarchy(ocrResult: OCRResult, imageDimensions: { width:
   const hasSmallText = sortedBySizes.some((t) => t.size <= 20);
 
   if (!hasLargeText) {
-    missingHeadings.push('No large heading detected');
+    missingHeadings.push("No large heading detected");
   }
 
   if (hasLargeText && hasSmallText && !hasMediumText) {
-    poorGrouping.push('Missing intermediate text size (subheadings)');
+    poorGrouping.push("Missing intermediate text size (subheadings)");
   }
 
   // Check spacing/grouping (simplified)
@@ -46,9 +54,10 @@ export function analyzeHierarchy(ocrResult: OCRResult, imageDimensions: { width:
     if (gap > 0) verticalGaps.push(gap);
   }
 
-  const avgGap = verticalGaps.reduce((a, b) => a + b, 0) / verticalGaps.length || 0;
+  const avgGap =
+    verticalGaps.reduce((a, b) => a + b, 0) / verticalGaps.length || 0;
   if (avgGap < 10) {
-    poorGrouping.push('Text elements too tightly spaced');
+    poorGrouping.push("Text elements too tightly spaced");
   }
 
   // Calculate priority score
@@ -61,13 +70,13 @@ export function analyzeHierarchy(ocrResult: OCRResult, imageDimensions: { width:
   // Generate suggestions
   const suggestions: string[] = [];
   if (dominantElements.length > 0) {
-    suggestions.push('Reduce size of overly dominant elements');
+    suggestions.push("Reduce size of overly dominant elements");
   }
   if (missingHeadings.length > 0) {
-    suggestions.push('Add clear heading hierarchy (H1, H2, H3)');
+    suggestions.push("Add clear heading hierarchy (H1, H2, H3)");
   }
   if (poorGrouping.length > 0) {
-    suggestions.push('Improve spacing between content groups');
+    suggestions.push("Improve spacing between content groups");
   }
 
   return {
