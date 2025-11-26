@@ -15,6 +15,15 @@ export interface GeminiAnalysis {
   userExperience: string;
   targetAudienceMatch: string;
   overallQuality: number;
+  contrastScore: number;
+  wcagComplianceScore: number;
+  colorPalette: {
+    primary: string[];
+    secondary: string[];
+    accent: string[];
+    text: string[];
+    background: string[];
+  };
 }
 
 /**
@@ -122,6 +131,9 @@ function validateAnalysis(data: Record<string, unknown>): GeminiAnalysis {
     "userExperience",
     "targetAudienceMatch",
     "overallQuality",
+    "contrastScore",
+    "wcagComplianceScore",
+    "colorPalette",
   ];
 
   for (const field of requiredFields) {
@@ -148,6 +160,32 @@ function validateAnalysis(data: Record<string, unknown>): GeminiAnalysis {
     data.overallQuality > 100
   ) {
     data.overallQuality = 50;
+  }
+
+  if (
+    typeof data.contrastScore !== "number" ||
+    data.contrastScore < 0 ||
+    data.contrastScore > 100
+  ) {
+    data.contrastScore = 50;
+  }
+
+  if (
+    typeof data.wcagComplianceScore !== "number" ||
+    data.wcagComplianceScore < 0 ||
+    data.wcagComplianceScore > 100
+  ) {
+    data.wcagComplianceScore = 50;
+  }
+
+  if (typeof data.colorPalette !== "object" || data.colorPalette === null) {
+    data.colorPalette = {
+      primary: [],
+      secondary: [],
+      accent: [],
+      text: [],
+      background: [],
+    };
   }
 
   return data as unknown as GeminiAnalysis;
@@ -183,18 +221,33 @@ export async function analyzeUIWithGemini(
   "typographyAnalysis": "analysis of font choices, sizes, and readability",
   "userExperience": "overall user experience assessment",
   "targetAudienceMatch": "who this UI is best suited for",
-  "overallQuality": "score from 0-100"
+  "overallQuality": "score from 0-100 representing overall UI quality",
+  "contrastScore": "score from 0-100 representing text-to-background contrast quality (100 = excellent contrast, 0 = poor contrast)",
+  "wcagComplianceScore": "score from 0-100 representing WCAG 2.1 AA compliance level (100 = fully compliant, 0 = non-compliant)",
+  "colorPalette": {
+    "primary": ["#hexcolor1", "#hexcolor2"],
+    "secondary": ["#hexcolor1"],
+    "accent": ["#hexcolor1"],
+    "text": ["#hexcolor1", "#hexcolor2"],
+    "background": ["#hexcolor1"]
+  }
 }
 
 Focus on:
 - WCAG compliance issues
-- Color contrast problems
+- Color contrast problems (calculate contrastScore based on text/background ratios)
 - Typography and readability
 - Layout and hierarchy
 - Interactive elements visibility
 - Mobile responsiveness indicators
 - Visual consistency
 - User flow clarity
+- Extract exact hex color codes used in the UI for the colorPalette
+
+Scoring guidelines:
+- contrastScore: 80-100 (all text passes WCAG AA), 60-79 (mostly good), 40-59 (some issues), 0-39 (major issues)
+- wcagComplianceScore: Consider text size, contrast ratios, touch targets, focus indicators, ARIA attributes
+- overallQuality: Holistic assessment of design quality, usability, and aesthetics
 
 Provide specific, actionable feedback. Return ONLY valid JSON, no markdown formatting.`;
 
@@ -259,6 +312,15 @@ Provide specific, actionable feedback. Return ONLY valid JSON, no markdown forma
         userExperience: "Rate limit exceeded - analysis unavailable",
         targetAudienceMatch: "Unable to determine due to rate limits",
         overallQuality: 0,
+        contrastScore: 0,
+        wcagComplianceScore: 0,
+        colorPalette: {
+          primary: [],
+          secondary: [],
+          accent: [],
+          text: [],
+          background: [],
+        },
       };
     }
 
@@ -282,6 +344,15 @@ Provide specific, actionable feedback. Return ONLY valid JSON, no markdown forma
       userExperience: "Unable to assess due to processing error",
       targetAudienceMatch: "General audience - manual evaluation needed",
       overallQuality: 50,
+      contrastScore: 50,
+      wcagComplianceScore: 50,
+      colorPalette: {
+        primary: [],
+        secondary: [],
+        accent: [],
+        text: [],
+        background: [],
+      },
     };
   }
 }

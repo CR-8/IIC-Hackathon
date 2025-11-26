@@ -29,10 +29,19 @@ export interface GeminiAnalysis {
   userExperience: string;
   targetAudienceMatch: string;
   overallQuality: number;
+  contrastScore: number;
+  wcagComplianceScore: number;
+  colorPalette: {
+    primary: string[];
+    secondary: string[];
+    accent: string[];
+    text: string[];
+    background: string[];
+  };
 }
 
 export interface WCAGAnalysis {
-  score: 'AA' | 'AAA' | 'FAIL';
+  score: "AA" | "AAA" | "FAIL";
   textContrast: ContrastCheck[];
   altText: { present: boolean; suggestions: string[] };
   ariaRoles: { found: string[]; missing: string[] };
@@ -68,13 +77,13 @@ export interface SizingAnalysis {
   clickTargets: { size: number; meets44px: boolean; element: string }[];
   fontSizes: { size: number; acceptable: boolean; element: string }[];
   paddingIssues: string[];
-  feasibility: 'Possible' | 'Needs Adjustments';
+  feasibility: "Possible" | "Needs Adjustments";
   problemAreas: string[];
 }
 
 export interface OverallScore {
   score: number;
-  label: 'Excellent' | 'Good' | 'Needs Fixing' | 'Poor';
+  label: "Excellent" | "Good" | "Needs Fixing" | "Poor";
   breakdown: {
     wcag: number;
     keyboard: number;
@@ -90,7 +99,7 @@ export interface KeyboardAnalysis {
   focusVisibility: boolean;
   interactiveElements: { element: string; accessible: boolean }[];
   missingLabels: string[];
-  passOrWarn: 'pass' | 'warn';
+  passOrWarn: "pass" | "warn";
 }
 
 export interface UISchemesSuggestions {
@@ -119,7 +128,13 @@ export interface TypographyAnalysis {
 
 export interface AudienceAnalysis {
   detected: {
-    category: 'Enterprise' | 'Education' | 'Fintech' | 'Creative' | 'Youth' | 'General';
+    category:
+      | "Enterprise"
+      | "Education"
+      | "Fintech"
+      | "Creative"
+      | "Youth"
+      | "General";
     confidence: number;
   }[];
   suggestions: string[];
@@ -139,7 +154,7 @@ export interface ResponsivenessAnalysis {
     aspectRatioIssues: string[];
     compressionIssues: string[];
   };
-  layoutShiftRisk: 'low' | 'medium' | 'high';
+  layoutShiftRisk: "low" | "medium" | "high";
   unresponsiveElements: string[];
 }
 
