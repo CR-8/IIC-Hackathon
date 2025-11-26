@@ -127,17 +127,17 @@
   body {
     @apply bg-background text-foreground;
   }
-  
+
   /* iOS-inspired focus styles */
   *:focus-visible {
     @apply outline-2 outline-offset-2 outline-primary;
   }
-  
+
   /* Smooth transitions */
   * {
     @apply transition-colors duration-200;
   }
-  
+
   /* Respect reduced motion */
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -148,14 +148,33 @@
       transition-duration: 0.01ms !important;
     }
   }
-  
+
   /* Custom shadows */
   .shadow-soft {
     box-shadow: var(--shadow-soft);
   }
-  
+
   .shadow-medium {
     box-shadow: var(--shadow-medium);
   }
 }
 
+@layer utilities {
+  /* Custom animations */
+  .animate-spin-slow {
+    animation: spin 3s linear infinite;
+  }
+
+  /* Bento grid utilities */
+  .bento-hover {
+    @apply hover:scale-[1.02] hover:shadow-lg transition-all duration-300;
+  }
+
+  /* Gradient backgrounds */
+  .bg-gradient-radial {
+    background-image: radial-gradient(
+      circle at center,
+      var(--tw-gradient-stops)
+    );
+  }
+}
